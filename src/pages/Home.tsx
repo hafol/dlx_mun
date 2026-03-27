@@ -44,12 +44,25 @@ export default function Home() {
       {/* Hero Section */}
       <header className="relative min-h-screen flex items-center justify-center overflow-hidden pt-16">
         <div className="absolute inset-0 z-0">
-          <img 
-            alt="Astana Kazakhstan" 
-            className="w-full h-full object-cover grayscale brightness-[0.4] contrast-125" 
-            src="https://images.unsplash.com/photo-1578575437130-527eed3abbec?auto=format&fit=crop&q=80&w=2000"
-            referrerPolicy="no-referrer"
-          />
+          <video
+            autoPlay
+            loop
+            muted
+            playsInline
+            className="w-full h-full object-cover grayscale brightness-[0.4] contrast-125"
+            poster="/assets/astana.jpg"
+          >
+            <source src="/assets/astana.mp4" type="video/mp4" />
+            {/* Fallback to image if video fails or doesn't exist */}
+            <img 
+              alt="Astana Kazakhstan" 
+              className="w-full h-full object-cover grayscale brightness-[0.4] contrast-125" 
+              src="/assets/astana.jpg"
+              onError={(e) => {
+                e.currentTarget.src = "https://images.unsplash.com/photo-1578575437130-527eed3abbec?auto=format&fit=crop&q=80&w=2000";
+              }}
+            />
+          </video>
           <div className="absolute inset-0 bg-gradient-to-t from-surface via-surface/20 to-transparent"></div>
           <div className="absolute inset-0 bg-gradient-to-r from-surface/60 via-transparent to-surface/60"></div>
         </div>
@@ -64,7 +77,7 @@ export default function Home() {
             <div className="flex items-center gap-4 mb-8">
               <div className="w-20 h-20 bg-primary-container/20 backdrop-blur-md rounded-xl flex items-center justify-center border border-white/10 overflow-hidden">
                 <img 
-                  src="https://i.ibb.co/L8N7p7p/dlx-logo.png" 
+                  src="/assets/logo.png" 
                   alt="DLX MUN Logo" 
                   className="w-16 h-16 object-contain brightness-200"
                   onError={(e) => {
