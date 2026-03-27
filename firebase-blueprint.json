@@ -1,0 +1,132 @@
+{
+  "entities": {
+    "User": {
+      "title": "User Profile",
+      "description": "Stores user identity, role, and status.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "Unique identifier from Firebase Auth." },
+        "email": { "type": "string", "format": "email", "description": "User's email address." },
+        "displayName": { "type": "string", "description": "User's full name." },
+        "photoURL": { "type": "string", "format": "uri", "description": "User's profile picture URL." },
+        "role": { "type": "string", "enum": ["admin", "delegate", "chair", "guest"], "description": "User's role in the system." },
+        "status": { "type": "string", "enum": ["active", "banned", "pending"], "description": "User's account status." },
+        "points": { "type": "integer", "description": "Total accumulated points from conferences." },
+        "rank": { "type": "string", "description": "Calculated rank based on points." },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Timestamp of account creation." },
+        "lastLogin": { "type": "string", "format": "date-time", "description": "Timestamp of last login." }
+      },
+      "required": ["uid", "email", "role", "status"]
+    },
+    "Application": {
+      "title": "MUN Application",
+      "description": "Stores delegate applications for conferences.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "UID of the delegate who applied." },
+        "fullName": { "type": "string", "description": "Full name of the delegate." },
+        "email": { "type": "string", "format": "email", "description": "Contact email." },
+        "institution": { "type": "string", "description": "School or University." },
+        "experience": { "type": "string", "description": "Previous MUN experience." },
+        "committee": { "type": "string", "description": "Preferred committee." },
+        "statement": { "type": "string", "description": "Statement of purpose." },
+        "status": { "type": "string", "enum": ["pending", "accepted", "rejected"], "description": "Application status." },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Timestamp of application." }
+      },
+      "required": ["uid", "fullName", "email", "institution", "experience", "committee", "statement", "status"]
+    },
+    "Conference": {
+      "title": "Conference Details",
+      "description": "Stores information about upcoming MUN conferences.",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string", "description": "Name of the conference." },
+        "location": { "type": "string", "description": "City and Country." },
+        "date": { "type": "string", "description": "Date of the event." },
+        "description": { "type": "string", "description": "Brief overview." },
+        "image": { "type": "string", "description": "Featured image URL." },
+        "organizerUid": { "type": "string", "description": "UID of the user who created the conference." },
+        "status": { "type": "string", "enum": ["pending", "approved", "rejected"], "description": "Conference approval status." },
+        "type": { "type": "string", "enum": ["verified", "community"], "description": "Type of conference." },
+        "format": { "type": "string", "enum": ["online", "offline"], "description": "Format of the conference." },
+        "websiteUrl": { "type": "string", "description": "External website link." },
+        "instagram": { "type": "string", "description": "Instagram handle or link." },
+        "phone": { "type": "string", "description": "Contact phone number." },
+        "founderName": { "type": "string", "description": "Name of the founder/organizer." },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Timestamp of creation." }
+      },
+      "required": ["title", "location", "date", "description", "organizerUid", "status", "format", "phone", "founderName"]
+    },
+    "ConferenceParticipant": {
+      "title": "Conference Participant",
+      "description": "Stores users registered for a specific conference.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "User ID." },
+        "displayName": { "type": "string", "description": "User's name." },
+        "role": { "type": "string", "enum": ["chair", "delegate"], "description": "Role in this conference." },
+        "status": { "type": "string", "enum": ["pending", "approved", "rejected"], "description": "Registration status." },
+        "committee": { "type": "string", "description": "Assigned committee." },
+        "joinedAt": { "type": "string", "format": "date-time", "description": "Timestamp of joining." }
+      },
+      "required": ["uid", "role", "status"]
+    },
+    "Evaluation": {
+      "title": "Delegate Evaluation",
+      "description": "Score given by a chair to a delegate during a conference.",
+      "type": "object",
+      "properties": {
+        "delegateUid": { "type": "string", "description": "UID of the delegate being evaluated." },
+        "chairUid": { "type": "string", "description": "UID of the chair giving the score." },
+        "conferenceId": { "type": "string", "description": "ID of the conference." },
+        "committee": { "type": "string", "description": "Committee name." },
+        "diplomacy": { "type": "integer", "description": "Score for diplomacy (1-10)." },
+        "speech": { "type": "integer", "description": "Score for speech (1-10)." },
+        "position": { "type": "integer", "description": "Score for position paper (1-10)." },
+        "totalScore": { "type": "integer", "description": "Calculated total score." },
+        "feedback": { "type": "string", "description": "Written feedback from the chair." },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Timestamp of evaluation." }
+      },
+      "required": ["delegateUid", "chairUid", "conferenceId", "totalScore"]
+    },
+    "Feedback": {
+      "title": "Site Feedback",
+      "description": "Stores user feedback about the website.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "UID of the user who gave feedback (optional)." },
+        "name": { "type": "string", "description": "Name of the person giving feedback." },
+        "email": { "type": "string", "format": "email", "description": "Email of the person giving feedback." },
+        "message": { "type": "string", "description": "The feedback message." },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Timestamp of feedback." }
+      },
+      "required": ["name", "email", "message", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/users/{uid}": {
+      "schema": "User",
+      "description": "User profile documents."
+    },
+    "/applications/{applicationId}": {
+      "schema": "Application",
+      "description": "Delegate applications."
+    },
+    "/conferences/{conferenceId}": {
+      "schema": "Conference",
+      "description": "Conference details."
+    },
+    "/conferences/{conferenceId}/participants/{uid}": {
+      "schema": "ConferenceParticipant",
+      "description": "Participants in a specific conference."
+    },
+    "/evaluations/{evaluationId}": {
+      "schema": "Evaluation",
+      "description": "Chair evaluations."
+    },
+    "/feedbacks/{feedbackId}": {
+      "schema": "Feedback",
+      "description": "User feedback collection."
+    }
+  }
+}

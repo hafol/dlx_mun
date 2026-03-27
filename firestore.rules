@@ -1,0 +1,294 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: users
+    // Document ID: uid
+    // Fields:
+    //   - uid: string (required, immutable) - Firebase Auth UID
+    //   - email: string (required, immutable) - User's email
+    //   - displayName: string (optional) - Full name
+    //   - photoURL: string (optional) - Profile picture URL
+    //   - role: string (required, enum: ['admin', 'delegate', 'chair', 'guest']) - User role
+    //   - status: string (required, enum: ['active', 'banned', 'pending']) - Account status
+    //   - points: int (optional) - Total scores
+    //   - rank: string (optional) - Calculated rank
+    //   - createdAt: timestamp (required, immutable) - Creation time
+    //   - lastLogin: timestamp (optional) - Last login time
+    //
+    // Collection: applications
+    // Document ID: auto-generated
+    // Fields:
+    //   - uid: string (required, immutable) - Applicant's UID
+    //   - fullName: string (required) - Applicant's full name
+    //   - email: string (required) - Applicant's email
+    //   - institution: string (required) - School/University
+    //   - experience: string (required) - MUN experience
+    //   - committee: string (required) - Preferred committee
+    //   - statement: string (required) - Statement of purpose
+    //   - status: string (required, enum: ['pending', 'accepted', 'rejected']) - Application status
+    //   - createdAt: timestamp (required, immutable) - Application time
+    //
+    // Collection: conferences
+    // Document ID: auto-generated
+    // Fields:
+    //   - title: string (required) - Conference name
+    //   - location: string (required) - City/Country
+    //   - date: string (required) - Event date
+    //   - description: string (required) - Overview
+    //   - image: string (optional) - Image URL
+    //   - organizerUid: string (required) - Creator UID
+    //   - status: string (required, enum: ['pending', 'approved', 'rejected']) - Approval status
+    //   - type: string (optional, enum: ['verified', 'community']) - Conference type
+    //   - websiteUrl: string (optional) - External link
+    //   - createdAt: timestamp (required) - Creation time
+    //
+    // Collection: evaluations
+    // Document ID: auto-generated
+    // Fields:
+    //   - delegateUid: string (required) - Delegate UID
+    //   - chairUid: string (required) - Chair UID
+    //   - conferenceId: string (required) - Conference ID
+    //   - committee: string (optional) - Committee name
+    //   - diplomacy: int (required) - Score 1-10
+    //   - speech: int (required) - Score 1-10
+    //   - position: int (required) - Score 1-10
+    //   - totalScore: int (required) - Sum of scores
+    //   - feedback: string (optional) - Feedback text
+    //   - createdAt: timestamp (required) - Creation time
+    //
+    // ===============================================================
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() &&
+        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
+         request.auth.token.email == "rezervparasat@gmail.com");
+    }
+
+    function isChair() {
+      return isAuthenticated() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'chair';
+    }
+
+    function isChairOf(confId) {
+      return isAuthenticated() && 
+        get(/databases/$(database)/documents/conferences/$(confId)/participants/$(request.auth.uid)).data.role == 'chair' &&
+        get(/databases/$(database)/documents/conferences/$(confId)/participants/$(request.auth.uid)).data.status == 'approved';
+    }
+
+    function isNotBanned() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.status != 'banned';
+    }
+
+    function isValidEmail(email) {
+      return email is string && email.matches("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$");
+    }
+
+    function hasOnlyAllowedFields(fields) {
+      return request.resource.data.keys().hasOnly(fields);
+    }
+
+    function areImmutableFieldsUnchanged(fields) {
+      return !request.resource.data.diff(resource.data).affectedKeys().hasAny(fields);
+    }
+
+    // ===============================================================
+    // Domain Validators
+    // ===============================================================
+
+    function isValidUser(data) {
+      return hasOnlyAllowedFields(['uid', 'email', 'displayName', 'photoURL', 'role', 'status', 'points', 'rank', 'createdAt', 'lastLogin']) &&
+             data.uid is string && data.uid.size() > 0 &&
+             data.email is string && isValidEmail(data.email) &&
+             data.role in ['admin', 'delegate', 'chair', 'guest'] &&
+             data.status in ['active', 'banned', 'pending'] &&
+             data.createdAt is timestamp;
+    }
+
+    function isValidApplication(data) {
+      return hasOnlyAllowedFields(['uid', 'fullName', 'email', 'institution', 'experience', 'committee', 'statement', 'status', 'createdAt']) &&
+             data.uid is string && data.uid.size() > 0 &&
+             data.fullName is string && data.fullName.size() > 0 && data.fullName.size() < 100 &&
+             data.email is string && isValidEmail(data.email) &&
+             data.institution is string && data.institution.size() > 0 && data.institution.size() < 200 &&
+             data.experience is string && data.experience.size() > 0 && data.experience.size() < 2000 &&
+             data.committee is string && data.committee.size() > 0 &&
+             data.statement is string && data.statement.size() > 0 && data.statement.size() < 5000 &&
+             data.status in ['pending', 'accepted', 'rejected'] &&
+             data.createdAt is timestamp;
+    }
+
+
+    function isValidConference(data) {
+      return hasOnlyAllowedFields(['title', 'location', 'date', 'description', 'image', 'organizerUid', 'status', 'type', 'format', 'websiteUrl', 'instagram', 'phone', 'founderName', 'createdAt']) &&
+             data.title is string && data.title.size() > 0 && data.title.size() < 200 &&
+             data.location is string && data.location.size() > 0 && data.location.size() < 200 &&
+             data.date is string && data.date.size() > 0 &&
+             data.description is string && data.description.size() > 0 && data.description.size() < 5000 &&
+             data.organizerUid is string &&
+             data.status in ['pending', 'approved', 'rejected'] &&
+             data.format in ['online', 'offline'] &&
+             data.phone is string && data.phone.size() > 0 &&
+             data.founderName is string && data.founderName.size() > 0;
+    }
+    function isValidEvaluation(data) {
+      return hasOnlyAllowedFields(['delegateUid', 'chairUid', 'conferenceId', 'conferenceTitle', 'committee', 'diplomacy', 'speech', 'position', 'totalScore', 'feedback', 'createdAt']) &&
+             data.delegateUid is string &&
+             data.chairUid is string &&
+             data.conferenceId is string &&
+             data.diplomacy is int && data.diplomacy >= 0 && data.diplomacy <= 10 &&
+             data.speech is int && data.speech >= 0 && data.speech <= 10 &&
+             data.position is int && data.position >= 0 && data.position <= 10 &&
+             data.totalScore is int &&
+             data.createdAt is timestamp;
+    }
+
+    function isValidParticipant(data) {
+      return hasOnlyAllowedFields(['uid', 'displayName', 'role', 'status', 'createdAt']) &&
+             data.uid is string &&
+             data.displayName is string &&
+             data.role in ['delegate', 'chair'] &&
+             data.status in ['pending', 'approved', 'rejected'] &&
+             data.createdAt is timestamp;
+    }
+
+    function isValidFeedback(data) {
+      return hasOnlyAllowedFields(['uid', 'name', 'email', 'message', 'createdAt']) &&
+             data.name is string && data.name.size() > 0 && data.name.size() < 100 &&
+             data.email is string && isValidEmail(data.email) &&
+             data.message is string && data.message.size() > 0 && data.message.size() < 2000 &&
+             data.createdAt is timestamp;
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+
+    // Users Collection
+    match /users/{userId} {
+      allow read: if isAuthenticated();
+      
+      allow create: if isAuthenticated() && isValidUser(request.resource.data) && (
+        (isOwner(userId) && request.resource.data.role == 'delegate' && request.resource.data.status == 'active') ||
+        isAdmin()
+      );
+
+      allow update: if isAuthenticated() && isValidUser(request.resource.data) && (
+        (isOwner(userId) && 
+         areImmutableFieldsUnchanged(['role', 'status', 'uid', 'email', 'points', 'rank', 'createdAt']) && 
+         isNotBanned()) ||
+        isAdmin()
+      );
+
+      allow delete: if isAdmin();
+    }
+
+    // Applications Collection
+    match /applications/{applicationId} {
+      allow read: if isAuthenticated() && (
+        (resource.data.uid == request.auth.uid) ||
+        isAdmin()
+      );
+
+      allow create: if isAuthenticated() && isValidApplication(request.resource.data) && (
+        (request.resource.data.uid == request.auth.uid && request.resource.data.status == 'pending' && isNotBanned()) ||
+        isAdmin()
+      );
+
+      allow update: if isAdmin() && isValidApplication(request.resource.data);
+
+      allow delete: if isAdmin();
+    }
+
+    // Conferences Collection
+    match /conferences/{conferenceId} {
+      allow read: if resource.data.status == 'approved' || isAdmin() || (isAuthenticated() && resource.data.organizerUid == request.auth.uid);
+
+      // Users can propose conferences
+      allow create: if isAuthenticated() && isNotBanned() && isValidConference(request.resource.data) && (
+        (request.resource.data.organizerUid == request.auth.uid && request.resource.data.status == 'pending') ||
+        isAdmin()
+      );
+
+      // Only admins or organizers can update
+      allow update: if isAdmin() || (
+        isAuthenticated() && 
+        resource.data.organizerUid == request.auth.uid && 
+        areImmutableFieldsUnchanged(['status', 'organizerUid', 'createdAt']) &&
+        isValidConference(request.resource.data)
+      );
+
+      allow delete: if isAdmin();
+
+      // Participants subcollection
+      match /participants/{userId} {
+        allow read: if isAuthenticated();
+        
+        allow create: if isAuthenticated() && isNotBanned() && isValidParticipant(request.resource.data) && (
+          (isOwner(userId) && request.resource.data.status == 'pending') ||
+          isAdmin()
+        );
+
+        allow update: if isAdmin() || (
+          isAuthenticated() && 
+          isOwner(userId) && 
+          areImmutableFieldsUnchanged(['role', 'status', 'uid', 'createdAt']) &&
+          isValidParticipant(request.resource.data)
+        );
+
+        allow delete: if isAdmin();
+      }
+    }
+
+    // Evaluations Collection
+    match /evaluations/{evaluationId} {
+      allow read: if isAuthenticated() && (
+        isAdmin() || 
+        isChair() || 
+        resource.data.delegateUid == request.auth.uid
+      );
+
+      // Only chairs can create evaluations
+      allow create: if (isChair() || isChairOf(request.resource.data.conferenceId)) && 
+                    isNotBanned() && 
+                    isValidEvaluation(request.resource.data) && (
+        request.resource.data.chairUid == request.auth.uid
+      );
+
+      allow update: if isAdmin() || (
+        isChair() && 
+        resource.data.chairUid == request.auth.uid &&
+        isValidEvaluation(request.resource.data)
+      );
+
+      allow delete: if isAdmin();
+    }
+
+    // Feedbacks Collection
+    match /feedbacks/{feedbackId} {
+      allow read: if isAdmin();
+      allow create: if isValidFeedback(request.resource.data);
+      allow update, delete: if isAdmin();
+    }
+
+    // Default deny
+    match /{path=**} {
+      allow read, write: if false;
+    }
+  }
+}
