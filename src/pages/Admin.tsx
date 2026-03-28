@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import { db, collection, onSnapshot, query, where, updateDoc, doc, UserProfile, Timestamp, orderBy } from '../firebase';
-import { ShieldCheck, Users, FileText, Ban, CheckCircle, XCircle, Search, MoreVertical, Globe, Zap } from 'lucide-react';
+import { ShieldCheck, Users, FileText, Ban, CheckCircle, XCircle, Search, MoreVertical, Globe, Zap, Send } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { toast } from 'sonner';
 
 export default function Admin() {
   const [activeTab, setActiveTab] = useState<'users' | 'applications' | 'conferences' | 'evaluations' | 'requests'>('users');
@@ -73,32 +74,53 @@ export default function Admin() {
     const newStatus = currentStatus === 'banned' ? 'active' : 'banned';
     try {
       await updateDoc(doc(db, 'users', uid), { status: newStatus });
+      toast.success(`User ${newStatus === 'banned' ? 'banned' : 'unbanned'} successfully`);
     } catch (err) {
       console.error('Error updating user status:', err);
+      toast.error('Failed to update user status');
     }
   };
 
   const handleUpdateAppStatus = async (id: string, status: string) => {
     try {
       await updateDoc(doc(db, 'applications', id), { status });
+      toast.success(`Application ${status} successfully`);
     } catch (err) {
       console.error('Error updating application status:', err);
+      toast.error('Failed to update application status');
     }
   };
 
   const handleUpdateConfStatus = async (id: string, status: string) => {
+    console.log(`Attempting to update conference ${id} status to ${status}...`);
     try {
       await updateDoc(doc(db, 'conferences', id), { status });
+      console.log(`Conference ${id} status successfully updated to ${status}`);
+      toast.success(`Conference ${status} successfully`);
     } catch (err) {
       console.error('Error updating conference status:', err);
+      toast.error('Failed to update conference status');
+    }
+  };
+
+  const handleDeleteConference = async (id: string) => {
+    if (!window.confirm("Are you sure you want to delete this conference? This action cannot be undone.")) return;
+    try {
+      await updateDoc(doc(db, 'conferences', id), { status: 'deleted' }); // Or use deleteDoc
+      toast.success("Conference marked as deleted");
+    } catch (err) {
+      console.error('Error deleting conference:', err);
+      toast.error('Failed to delete conference');
     }
   };
 
   const handleUpdateParticipantStatus = async (confId: string, userId: string, status: string) => {
     try {
       await updateDoc(doc(db, 'conferences', confId, 'participants', userId), { status });
+      toast.success(`Participant ${status} successfully`);
     } catch (err) {
       console.error('Error updating participant status:', err);
+      toast.error('Failed to update participant status');
     }
   };
 
@@ -107,8 +129,10 @@ export default function Admin() {
     
     try {
       await updateDoc(doc(db, 'users', uid), { role: newRole });
+      toast.success(`User role updated to ${newRole}`);
     } catch (err) {
       console.error('Error updating user role:', err);
+      toast.error('Failed to update user role');
     }
   };
 
@@ -117,8 +141,10 @@ export default function Admin() {
     
     try {
       await updateDoc(doc(db, 'users', uid), { role: newRole });
+      toast.success(`User role updated to ${newRole}`);
     } catch (err) {
       console.error('Error updating user role:', err);
+      toast.error('Failed to update user role');
     }
   };
 
@@ -184,9 +210,14 @@ export default function Admin() {
           </button>
           <button 
             onClick={() => setActiveTab('requests')}
-            className={`px-6 py-2 rounded-lg text-sm font-bold transition-all flex items-center gap-2 ${activeTab === 'requests' ? 'bg-primary-container text-on-primary-container' : 'text-on-surface-variant hover:text-on-surface'}`}
+            className={`px-6 py-2 rounded-lg text-sm font-bold transition-all flex items-center gap-2 relative ${activeTab === 'requests' ? 'bg-primary-container text-on-primary-container' : 'text-on-surface-variant hover:text-on-surface'}`}
           >
-            <FileText size={16} /> Requests
+            <Send size={16} /> MUN Proposals
+            {conferences.filter(c => c.status === 'pending').length > 0 && (
+              <span className="absolute -top-1 -right-1 w-4 h-4 bg-error text-[8px] flex items-center justify-center rounded-full text-white animate-pulse">
+                {conferences.filter(c => c.status === 'pending').length}
+              </span>
+            )}
           </button>
         </div>
       </header>
@@ -380,7 +411,7 @@ export default function Admin() {
                       </td>
                       <td className="px-6 py-4">
                         <span className={`text-[10px] font-black uppercase tracking-widest px-2 py-1 rounded ${
-                          conf.status === 'active' ? 'bg-success/20 text-success' : 
+                          conf.status === 'approved' ? 'bg-success/20 text-success' : 
                           conf.status === 'rejected' ? 'bg-error/20 text-error' : 
                           'bg-surface-container-highest text-on-surface-variant'
                         }`}>
@@ -396,13 +427,15 @@ export default function Admin() {
                           >
                             <Users size={18} />
                           </button>
-                          <button 
-                            onClick={() => handleUpdateConfStatus(conf.id, 'approved')}
-                            className="p-2 text-success hover:bg-success/10 rounded-lg transition-all"
-                            title="Approve"
-                          >
-                            <CheckCircle size={18} />
-                          </button>
+                          {conf.status !== 'approved' && (
+                            <button 
+                              onClick={() => handleUpdateConfStatus(conf.id, 'approved')}
+                              className="p-2 text-success hover:bg-success/10 rounded-lg transition-all"
+                              title="Approve"
+                            >
+                              <CheckCircle size={18} />
+                            </button>
+                          )}
                           <button 
                             onClick={() => handleUpdateConfStatus(conf.id, 'rejected')}
                             className="p-2 text-error hover:bg-error/10 rounded-lg transition-all"
@@ -446,13 +479,15 @@ export default function Admin() {
                       </td>
                       <td className="px-6 py-4 text-right">
                         <div className="flex justify-end gap-2">
-                          <button 
-                            onClick={() => handleUpdateConfStatus(req.id, 'approved')}
-                            className="p-2 text-success hover:bg-success/10 rounded-lg transition-all"
-                            title="Approve"
-                          >
-                            <CheckCircle size={18} />
-                          </button>
+                          {req.status !== 'approved' && (
+                            <button 
+                              onClick={() => handleUpdateConfStatus(req.id, 'approved')}
+                              className="p-2 text-success hover:bg-success/10 rounded-lg transition-all"
+                              title="Approve"
+                            >
+                              <CheckCircle size={18} />
+                            </button>
+                          )}
                           <button 
                             onClick={() => handleUpdateConfStatus(req.id, 'rejected')}
                             className="p-2 text-error hover:bg-error/10 rounded-lg transition-all"

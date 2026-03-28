@@ -10,11 +10,16 @@ import Apply from './pages/Apply';
 import Login from './pages/Login';
 import Admin from './pages/Admin';
 import HostMUN from './pages/HostMUN';
+import Organizer from './pages/Organizer';
 import Leaderboard from './pages/Leaderboard';
+import SessionView from './pages/SessionView';
 import ChairDashboard from './pages/ChairDashboard';
+import SessionManager from './pages/chair/SessionManager';
 import Privacy from './pages/Privacy';
 import Terms from './pages/Terms';
 import Contact from './pages/Contact';
+
+import { Toaster } from 'sonner';
 
 function ScrollToTop() {
   const { pathname } = useLocation();
@@ -25,7 +30,7 @@ function ScrollToTop() {
 }
 
 // Protected Route Component
-function ProtectedRoute({ children, adminOnly, chairOnly }: { children: ReactNode; adminOnly?: boolean; chairOnly?: boolean }) {
+function ProtectedRoute({ children, adminOnly, chairOnly, organizerOnly }: { children: ReactNode; adminOnly?: boolean; chairOnly?: boolean; organizerOnly?: boolean }) {
   const { user, loading, isAdmin, isBanned, profile } = useFirebase();
 
   if (loading) {
@@ -59,6 +64,10 @@ function ProtectedRoute({ children, adminOnly, chairOnly }: { children: ReactNod
     return <Navigate to="/" replace />;
   }
 
+  if (organizerOnly && !isAdmin && profile?.role !== 'organizer') {
+    return <Navigate to="/" replace />;
+  }
+
   return <>{children}</>;
 }
 
@@ -67,6 +76,7 @@ export default function App() {
     <ErrorBoundary>
       <FirebaseProvider>
         <Router>
+          <Toaster position="top-center" richColors />
           <ScrollToTop />
           <div className="min-h-screen flex flex-col bg-surface text-on-surface font-sans selection:bg-primary-container/30 selection:text-primary-container">
             <Navbar />
@@ -76,6 +86,7 @@ export default function App() {
                 <Route path="/committees" element={<Conferences />} />
                 <Route path="/conferences" element={<Conferences />} />
                 <Route path="/leaderboard" element={<Leaderboard />} />
+                <Route path="/session/:id" element={<SessionView />} />
                 <Route path="/login" element={<Login />} />
                 <Route path="/privacy" element={<Privacy />} />
                 <Route path="/terms" element={<Terms />} />
@@ -113,10 +124,26 @@ export default function App() {
                   } 
                 />
                 <Route 
+                  path="/chair/session" 
+                  element={
+                    <ProtectedRoute chairOnly>
+                      <SessionManager />
+                    </ProtectedRoute>
+                  } 
+                />
+                <Route 
                   path="/admin" 
                   element={
                     <ProtectedRoute adminOnly>
                       <Admin />
+                    </ProtectedRoute>
+                  } 
+                />
+                <Route 
+                  path="/organizer" 
+                  element={
+                    <ProtectedRoute organizerOnly>
+                      <Organizer />
                     </ProtectedRoute>
                   } 
                 />

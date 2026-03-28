@@ -1,6 +1,6 @@
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'motion/react';
-import { Globe, Menu, X, LogOut, ShieldCheck, ChevronRight, Star } from 'lucide-react';
+import { Globe, Menu, X, LogOut, ShieldCheck, ChevronRight, Star, Users } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useFirebase } from '../FirebaseContext';
 import { auth, signOut } from '../firebase';
@@ -85,6 +85,11 @@ export function Navbar() {
                 <ShieldCheck size={20} />
               </Link>
             )}
+            {(isAdmin || profile?.role === 'organizer') && (
+              <Link to="/organizer" className="text-primary-container hover:opacity-80 transition-all" title="Organizer Dashboard">
+                <Users size={20} />
+              </Link>
+            )}
             
             {user ? (
               <div className="flex items-center gap-4">
@@ -166,6 +171,15 @@ export function Navbar() {
                   className="text-primary-container font-bold uppercase tracking-widest text-sm flex items-center gap-2"
                 >
                   <ShieldCheck size={18} /> Admin Dashboard
+                </Link>
+              )}
+              {(isAdmin || profile?.role === 'organizer') && (
+                <Link 
+                  to="/organizer" 
+                  onClick={() => setIsOpen(false)}
+                  className="text-primary-container font-bold uppercase tracking-widest text-sm flex items-center gap-2"
+                >
+                  <Users size={18} /> Organizer Dashboard
                 </Link>
               )}
               {user ? (

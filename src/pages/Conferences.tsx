@@ -2,8 +2,14 @@ import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Search, Calendar, MapPin, ExternalLink, Bell, Share2, Mail, Loader2, CheckCircle, UserPlus, ShieldCheck, X } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { db, collection, onSnapshot, query, where, doc, setDoc, serverTimestamp } from '../firebase';
+import { db, collection, onSnapshot, query, where, doc, setDoc, serverTimestamp, handleFirestoreError, OperationType } from '../firebase';
 import { useFirebase } from '../FirebaseContext';
+import { toast } from 'sonner';
+
+interface Committee {
+  name: string;
+  topic: string;
+}
 
 interface Conference {
   id: string;
@@ -16,7 +22,14 @@ interface Conference {
   type: string;
   format: 'online' | 'offline';
   websiteUrl?: string;
+  googleFormUrl?: string;
   instagram?: string;
+  kaspiNumber?: string;
+  kaspiName?: string;
+  price?: number;
+  language?: string;
+  committees?: Committee[];
+  participantCount?: number;
 }
 
 export default function Conferences() {
@@ -24,23 +37,61 @@ export default function Conferences() {
   const [conferences, setConferences] = useState<Conference[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedConf, setSelectedConf] = useState<Conference | null>(null);
+  const [viewingConf, setViewingConf] = useState<Conference | null>(null);
+  const [participantCounts, setParticipantCounts] = useState<Record<string, number>>({});
   const [joining, setJoining] = useState(false);
   const [joinSuccess, setJoinSuccess] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterFormat, setFilterFormat] = useState<'all' | 'online' | 'offline'>('all');
 
+  const [joinData, setJoinData] = useState({
+    bio: '',
+    origin: '',
+    preferredCommittees: [] as string[],
+    paymentProof: ''
+  });
+
   useEffect(() => {
     const q = query(collection(db, 'conferences'), where('status', '==', 'approved'));
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      const confs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as Conference[];
+      const confs = snapshot.docs.map(doc => ({ 
+        id: doc.id, 
+        ...doc.data()
+      })) as Conference[];
       setConferences(confs);
       setLoading(false);
+
+      // Fetch participant counts for each conference
+      confs.forEach(conf => {
+        const pQuery = query(collection(db, 'conferences', conf.id, 'participants'), where('status', '==', 'approved'));
+        onSnapshot(pQuery, (pSnapshot) => {
+          setParticipantCounts(prev => ({
+            ...prev,
+            [conf.id]: pSnapshot.size
+          }));
+        });
+      });
     });
     return () => unsubscribe();
   }, []);
 
   const handleJoin = async (role: 'delegate' | 'chair') => {
-    if (!user || !selectedConf) return;
+    if (!user) {
+      toast.error("You must be logged in to join a conference");
+      return;
+    }
+    if (!selectedConf) return;
+
+    if (!joinData.bio || !joinData.origin || joinData.preferredCommittees.length < 2) {
+      toast.error("Please fill in all required fields and select 2 committees");
+      return;
+    }
+
+    if (role === 'delegate' && !joinData.paymentProof && (selectedConf.price || 0) > 0) {
+      toast.error("Please upload payment proof");
+      return;
+    }
+    
     setJoining(true);
     try {
       const participantRef = doc(db, 'conferences', selectedConf.id, 'participants', user.uid);
@@ -49,15 +100,23 @@ export default function Conferences() {
         displayName: user.displayName || 'Anonymous',
         role,
         status: 'pending',
-        joinedAt: serverTimestamp()
+        bio: joinData.bio,
+        origin: joinData.origin,
+        preferredCommittees: joinData.preferredCommittees,
+        paymentProof: joinData.paymentProof,
+        createdAt: serverTimestamp()
       });
       setJoinSuccess(true);
+      toast.success(`Application as ${role} sent successfully!`);
       setTimeout(() => {
         setJoinSuccess(false);
         setSelectedConf(null);
+        setJoinData({ bio: '', origin: '', preferredCommittees: [], paymentProof: '' });
       }, 3000);
     } catch (error) {
       console.error('Error joining conference:', error);
+      toast.error("Failed to join conference. Please try again.");
+      handleFirestoreError(error, OperationType.CREATE, `conferences/${selectedConf.id}/participants/${user.uid}`);
     } finally {
       setJoining(false);
     }
@@ -135,7 +194,7 @@ export default function Conferences() {
             <h2 className="text-3xl font-bold tracking-tight mb-2">Active Conferences</h2>
             <p className="text-on-surface/50 max-w-md">Browse and join upcoming Model UN simulations across the globe.</p>
           </div>
-          <Link to="/host-mun">
+          <Link to="/host">
             <button className="bg-surface-container-high text-on-surface px-6 py-3 rounded font-bold border border-white/5 uppercase tracking-widest text-[10px]">Host an Event</button>
           </Link>
         </div>
@@ -177,10 +236,10 @@ export default function Conferences() {
                   <p className="text-sm text-on-surface/50 mb-8 line-clamp-3 flex-1">{conf.description}</p>
                   <div className="flex gap-3">
                     <button 
-                      onClick={() => setSelectedConf(conf)}
+                      onClick={() => setViewingConf(conf)}
                       className="flex-1 bg-white text-black py-3 rounded-lg font-bold text-xs uppercase tracking-widest hover:bg-primary-container transition-colors"
                     >
-                      Join MUN
+                      Learn More
                     </button>
                     {conf.websiteUrl && (
                       <a 
@@ -199,6 +258,101 @@ export default function Conferences() {
           </div>
         )}
       </section>
+
+      {/* Details Modal */}
+      <AnimatePresence>
+        {viewingConf && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-6">
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setViewingConf(null)}
+              className="absolute inset-0 bg-surface/90 backdrop-blur-sm"
+            />
+            <motion.div 
+              initial={{ scale: 0.9, opacity: 0, y: 20 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.9, opacity: 0, y: 20 }}
+              className="relative w-full max-w-2xl bg-surface-container-low p-8 rounded-3xl border border-white/10 shadow-2xl overflow-hidden flex flex-col max-h-[90vh]"
+            >
+              <button 
+                onClick={() => setViewingConf(null)}
+                className="absolute top-6 right-6 text-on-surface/40 hover:text-on-surface z-10"
+              >
+                <X size={24} />
+              </button>
+
+              <div className="overflow-y-auto pr-2 custom-scrollbar">
+                <div className="relative h-64 -mx-8 -mt-8 mb-8">
+                  <img src={viewingConf.image} className="w-full h-full object-cover" alt="" />
+                  <div className="absolute inset-0 bg-gradient-to-t from-surface-container-low to-transparent" />
+                  <div className="absolute bottom-6 left-8">
+                    <h2 className="text-4xl font-black tracking-tighter uppercase">{viewingConf.title}</h2>
+                    <p className="text-primary-container font-bold text-xs uppercase tracking-widest mt-2">{viewingConf.location} • {viewingConf.date}</p>
+                  </div>
+                </div>
+
+                <div className="space-y-8">
+                  <div className="grid grid-cols-3 gap-4">
+                    <div className="p-4 bg-surface-container rounded-2xl border border-white/5 text-center">
+                      <p className="text-[10px] uppercase font-bold text-on-surface/40 mb-1">Participants</p>
+                      <p className="text-xl font-black">{participantCounts[viewingConf.id] || 0}</p>
+                    </div>
+                    <div className="p-4 bg-surface-container rounded-2xl border border-white/5 text-center">
+                      <p className="text-[10px] uppercase font-bold text-on-surface/40 mb-1">Committees</p>
+                      <p className="text-xl font-black">{viewingConf.committees?.length || 0}</p>
+                    </div>
+                    <div className="p-4 bg-surface-container rounded-2xl border border-white/5 text-center">
+                      <p className="text-[10px] uppercase font-bold text-on-surface/40 mb-1">Language</p>
+                      <p className="text-xl font-black">{viewingConf.language}</p>
+                    </div>
+                  </div>
+
+                  <div className="space-y-3">
+                    <h3 className="text-xs font-bold uppercase tracking-widest text-primary-container">Description</h3>
+                    <p className="text-sm text-on-surface/70 leading-relaxed">{viewingConf.description}</p>
+                  </div>
+
+                  <div className="space-y-4">
+                    <h3 className="text-xs font-bold uppercase tracking-widest text-primary-container">Committees & Topics</h3>
+                    <div className="grid gap-3">
+                      {viewingConf.committees?.map((comm, idx) => (
+                        <div key={idx} className="p-4 bg-surface-container rounded-xl border border-white/5">
+                          <p className="font-bold text-sm mb-1">{comm.name}</p>
+                          <p className="text-xs text-on-surface/50">{comm.topic}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="flex gap-4 pt-4">
+                    <button 
+                      onClick={() => {
+                        setViewingConf(null);
+                        setSelectedConf(viewingConf);
+                      }}
+                      className="flex-1 bg-primary-container text-on-primary-container py-4 rounded-xl font-bold text-xs uppercase tracking-widest hover:opacity-90 transition-all"
+                    >
+                      Register Now
+                    </button>
+                    {viewingConf.googleFormUrl && (
+                      <a 
+                        href={viewingConf.googleFormUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex-1 bg-surface-container-highest text-on-surface py-4 rounded-xl font-bold text-xs uppercase tracking-widest text-center hover:bg-white/10 transition-all"
+                      >
+                        Google Form
+                      </a>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
 
       {/* Join Modal */}
       <AnimatePresence>
@@ -233,46 +387,129 @@ export default function Conferences() {
                   <p className="text-on-surface/60">Your application has been sent to the MUN Secretariat for approval.</p>
                 </div>
               ) : (
-                <>
+                <div className="max-h-[80vh] overflow-y-auto pr-2 custom-scrollbar">
                   <h3 className="text-2xl font-bold mb-2 uppercase tracking-tight">Join {selectedConf.title}</h3>
-                  <p className="text-on-surface/60 mb-8 text-sm">Select your desired role for this conference. All applications are subject to approval by the Secretariat.</p>
-                  
-                  <div className="space-y-4">
-                    <button 
-                      disabled={joining}
-                      onClick={() => handleJoin('delegate')}
-                      className="w-full flex items-center gap-4 p-6 bg-surface-container rounded-2xl border border-white/5 hover:border-primary-container/50 transition-all group"
-                    >
-                      <div className="p-3 bg-primary-container/10 rounded-xl text-primary-container">
-                        <UserPlus size={24} />
+                  <div className="space-y-6 mt-6">
+                    {/* Conference Details Section */}
+                    <div className="p-4 bg-surface-container rounded-xl border border-white/5 space-y-3">
+                      <p className="text-xs font-bold uppercase tracking-widest text-primary-container">Conference Details</p>
+                      <p className="text-sm text-on-surface/70">{selectedConf.description}</p>
+                      <div className="grid grid-cols-2 gap-4 text-[10px] uppercase tracking-widest font-bold text-on-surface/40">
+                        <span>Language: <span className="text-on-surface">{selectedConf.language}</span></span>
+                        <span>Price: <span className="text-on-surface">{selectedConf.price} KZT</span></span>
                       </div>
-                      <div className="text-left">
-                        <p className="font-bold">Join as Delegate</p>
-                        <p className="text-xs text-on-surface/40">Participate in committees and debates.</p>
-                      </div>
-                    </button>
-
-                    <button 
-                      disabled={joining}
-                      onClick={() => handleJoin('chair')}
-                      className="w-full flex items-center gap-4 p-6 bg-surface-container rounded-2xl border border-white/5 hover:border-primary-container/50 transition-all group"
-                    >
-                      <div className="p-3 bg-primary-container/10 rounded-xl text-primary-container">
-                        <ShieldCheck size={24} />
-                      </div>
-                      <div className="text-left">
-                        <p className="font-bold">Apply as Chair</p>
-                        <p className="text-xs text-on-surface/40">Lead a committee and evaluate delegates.</p>
-                      </div>
-                    </button>
-                  </div>
-
-                  {joining && (
-                    <div className="mt-6 flex justify-center">
-                      <Loader2 className="animate-spin text-primary-container" size={24} />
                     </div>
-                  )}
-                </>
+
+                    {/* Committees Section */}
+                    <div className="space-y-3">
+                      <p className="text-xs font-bold uppercase tracking-widest text-primary-container">Committees</p>
+                      <div className="grid gap-2">
+                        {selectedConf.committees?.map((comm, idx) => (
+                          <div key={idx} className="p-3 bg-surface-container-high rounded-lg border border-white/5">
+                            <p className="text-sm font-bold">{comm.name}</p>
+                            <p className="text-[10px] text-on-surface/50">{comm.topic}</p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Registration Form */}
+                    <div className="space-y-4 pt-4 border-t border-white/5">
+                      <div className="space-y-2">
+                        <label className="text-[10px] uppercase tracking-widest text-on-surface/40 font-bold">Who are you? (Bio)</label>
+                        <textarea 
+                          value={joinData.bio}
+                          onChange={(e) => setJoinData({...joinData, bio: e.target.value})}
+                          className="w-full bg-surface-container border-none rounded-lg p-3 text-sm focus:ring-1 focus:ring-primary-container resize-none"
+                          placeholder="Tell us about yourself..."
+                          rows={3}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-[10px] uppercase tracking-widest text-on-surface/40 font-bold">Where are you from?</label>
+                        <input 
+                          value={joinData.origin}
+                          onChange={(e) => setJoinData({...joinData, origin: e.target.value})}
+                          className="w-full bg-surface-container border-none rounded-lg p-3 text-sm focus:ring-1 focus:ring-primary-container"
+                          placeholder="City, Country"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-[10px] uppercase tracking-widest text-on-surface/40 font-bold">Select 2 Preferred Committees</label>
+                        <div className="grid grid-cols-1 gap-2">
+                          {selectedConf.committees?.map((comm, idx) => (
+                            <label key={idx} className="flex items-center gap-3 p-3 bg-surface-container rounded-lg cursor-pointer hover:bg-white/5 transition-colors">
+                              <input 
+                                type="checkbox"
+                                checked={joinData.preferredCommittees.includes(comm.name)}
+                                onChange={(e) => {
+                                  if (e.target.checked) {
+                                    if (joinData.preferredCommittees.length < 2) {
+                                      setJoinData({...joinData, preferredCommittees: [...joinData.preferredCommittees, comm.name]});
+                                    }
+                                  } else {
+                                    setJoinData({...joinData, preferredCommittees: joinData.preferredCommittees.filter(c => c !== comm.name)});
+                                  }
+                                }}
+                                className="rounded border-white/10 bg-surface-container text-primary-container focus:ring-primary-container"
+                              />
+                              <span className="text-xs">{comm.name}</span>
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Payment Section */}
+                      {(selectedConf.price || 0) > 0 && (
+                        <div className="p-4 bg-amber-400/10 rounded-xl border border-amber-400/20 space-y-4">
+                          <p className="text-xs font-bold uppercase tracking-widest text-amber-400">Payment Required</p>
+                          <div className="text-sm space-y-1">
+                            <p>Send <span className="font-bold">{selectedConf.price} KZT</span> to:</p>
+                            <p className="text-lg font-black">{selectedConf.kaspiNumber}</p>
+                            <p className="text-xs opacity-60">Recipient: {selectedConf.kaspiName}</p>
+                          </div>
+                          <div className="space-y-2">
+                            <label className="text-[10px] uppercase tracking-widest text-on-surface/40 font-bold">Upload Payment Proof (PDF/Image)</label>
+                            <input 
+                              type="file"
+                              accept="image/*,application/pdf"
+                              onChange={(e) => {
+                                const file = e.target.files?.[0];
+                                if (file) {
+                                  const reader = new FileReader();
+                                  reader.onloadend = () => {
+                                    setJoinData({...joinData, paymentProof: reader.result as string});
+                                  };
+                                  reader.readAsDataURL(file);
+                                }
+                              }}
+                              className="w-full text-xs text-on-surface/40 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-bold file:bg-primary-container file:text-on-primary-container hover:file:opacity-90"
+                            />
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="flex gap-4 pt-4">
+                      <button 
+                        disabled={joining}
+                        onClick={() => handleJoin('delegate')}
+                        className="flex-1 flex items-center justify-center gap-2 p-4 bg-primary-container text-on-primary-container rounded-xl font-bold text-xs uppercase tracking-widest hover:opacity-90 transition-all"
+                      >
+                        {joining ? <Loader2 className="animate-spin" size={16} /> : <UserPlus size={16} />}
+                        Join as Delegate
+                      </button>
+                      <button 
+                        disabled={joining}
+                        onClick={() => handleJoin('chair')}
+                        className="flex-1 flex items-center justify-center gap-2 p-4 bg-surface-container-highest text-on-surface rounded-xl font-bold text-xs uppercase tracking-widest hover:bg-white/10 transition-all"
+                      >
+                        {joining ? <Loader2 className="animate-spin" size={16} /> : <ShieldCheck size={16} />}
+                        Apply as Chair
+                      </button>
+                    </div>
+                  </div>
+                </div>
               )}
             </motion.div>
           </div>

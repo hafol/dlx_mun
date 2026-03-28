@@ -84,7 +84,9 @@ export default function Home() {
                     e.currentTarget.style.display = 'none';
                     const parent = e.currentTarget.parentElement;
                     if (parent) {
-                      parent.innerHTML = '<span class="text-3xl font-black text-primary-container">D</span>';
+                      // Only show fallback if image is truly missing
+                      parent.classList.add('flex', 'items-center', 'justify-center');
+                      parent.innerHTML = '<span class="text-3xl font-black text-primary-container opacity-50">D</span>';
                     }
                   }}
                 />

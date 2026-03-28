@@ -44,18 +44,34 @@
         "location": { "type": "string", "description": "City and Country." },
         "date": { "type": "string", "description": "Date of the event." },
         "description": { "type": "string", "description": "Brief overview." },
-        "image": { "type": "string", "description": "Featured image URL." },
+        "image": { "type": "string", "description": "Featured image (Base64 or URL)." },
         "organizerUid": { "type": "string", "description": "UID of the user who created the conference." },
         "status": { "type": "string", "enum": ["pending", "approved", "rejected"], "description": "Conference approval status." },
         "type": { "type": "string", "enum": ["verified", "community"], "description": "Type of conference." },
         "format": { "type": "string", "enum": ["online", "offline"], "description": "Format of the conference." },
         "websiteUrl": { "type": "string", "description": "External website link." },
+        "googleFormUrl": { "type": "string", "description": "Alternative Google Form link." },
         "instagram": { "type": "string", "description": "Instagram handle or link." },
         "phone": { "type": "string", "description": "Contact phone number." },
         "founderName": { "type": "string", "description": "Name of the founder/organizer." },
+        "kaspiNumber": { "type": "string", "description": "Kaspi number for payments." },
+        "kaspiName": { "type": "string", "description": "Name on Kaspi account." },
+        "price": { "type": "number", "description": "Registration fee." },
+        "language": { "type": "string", "description": "Language of the conference." },
+        "committees": { 
+          "type": "array", 
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": { "type": "string" },
+              "topic": { "type": "string" }
+            }
+          },
+          "description": "List of committees and their topics."
+        },
         "createdAt": { "type": "string", "format": "date-time", "description": "Timestamp of creation." }
       },
-      "required": ["title", "location", "date", "description", "organizerUid", "status", "format", "phone", "founderName"]
+      "required": ["title", "location", "date", "description", "organizerUid", "status", "format", "phone", "founderName", "kaspiNumber", "kaspiName", "price", "language", "committees"]
     },
     "ConferenceParticipant": {
       "title": "Conference Participant",
@@ -67,9 +83,13 @@
         "role": { "type": "string", "enum": ["chair", "delegate"], "description": "Role in this conference." },
         "status": { "type": "string", "enum": ["pending", "approved", "rejected"], "description": "Registration status." },
         "committee": { "type": "string", "description": "Assigned committee." },
-        "joinedAt": { "type": "string", "format": "date-time", "description": "Timestamp of joining." }
+        "preferredCommittees": { "type": "array", "items": { "type": "string" }, "description": "User's top 2 committee choices." },
+        "bio": { "type": "string", "description": "Who the user is." },
+        "origin": { "type": "string", "description": "Where the user is from." },
+        "paymentProof": { "type": "string", "description": "Base64 or URL of payment transaction." },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Timestamp of joining." }
       },
-      "required": ["uid", "role", "status"]
+      "required": ["uid", "role", "status", "preferredCommittees", "bio", "origin"]
     },
     "Evaluation": {
       "title": "Delegate Evaluation",

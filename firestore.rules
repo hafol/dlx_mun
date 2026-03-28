@@ -135,7 +135,7 @@ service cloud.firestore {
 
 
     function isValidConference(data) {
-      return hasOnlyAllowedFields(['title', 'location', 'date', 'description', 'image', 'organizerUid', 'status', 'type', 'format', 'websiteUrl', 'instagram', 'phone', 'founderName', 'createdAt']) &&
+      return hasOnlyAllowedFields(['title', 'location', 'date', 'description', 'image', 'organizerUid', 'status', 'type', 'format', 'websiteUrl', 'googleFormUrl', 'instagram', 'phone', 'founderName', 'kaspiNumber', 'kaspiName', 'price', 'language', 'committees', 'createdAt']) &&
              data.title is string && data.title.size() > 0 && data.title.size() < 200 &&
              data.location is string && data.location.size() > 0 && data.location.size() < 200 &&
              data.date is string && data.date.size() > 0 &&
@@ -144,7 +144,13 @@ service cloud.firestore {
              data.status in ['pending', 'approved', 'rejected'] &&
              data.format in ['online', 'offline'] &&
              data.phone is string && data.phone.size() > 0 &&
-             data.founderName is string && data.founderName.size() > 0;
+             data.founderName is string && data.founderName.size() > 0 &&
+             data.kaspiNumber is string &&
+             data.kaspiName is string &&
+             data.price is number &&
+             data.language is string &&
+             data.committees is list &&
+             data.createdAt is timestamp;
     }
     function isValidEvaluation(data) {
       return hasOnlyAllowedFields(['delegateUid', 'chairUid', 'conferenceId', 'conferenceTitle', 'committee', 'diplomacy', 'speech', 'position', 'totalScore', 'feedback', 'createdAt']) &&
@@ -159,11 +165,14 @@ service cloud.firestore {
     }
 
     function isValidParticipant(data) {
-      return hasOnlyAllowedFields(['uid', 'displayName', 'role', 'status', 'createdAt']) &&
+      return hasOnlyAllowedFields(['uid', 'displayName', 'role', 'status', 'committee', 'preferredCommittees', 'bio', 'origin', 'paymentProof', 'createdAt']) &&
              data.uid is string &&
              data.displayName is string &&
              data.role in ['delegate', 'chair'] &&
              data.status in ['pending', 'approved', 'rejected'] &&
+             data.preferredCommittees is list &&
+             data.bio is string &&
+             data.origin is string &&
              data.createdAt is timestamp;
     }
 
@@ -246,9 +255,12 @@ service cloud.firestore {
 
         allow update: if isAdmin() || (
           isAuthenticated() && 
-          isOwner(userId) && 
-          areImmutableFieldsUnchanged(['role', 'status', 'uid', 'createdAt']) &&
-          isValidParticipant(request.resource.data)
+          (isOwner(userId) && 
+           areImmutableFieldsUnchanged(['role', 'status', 'uid', 'createdAt']) &&
+           isValidParticipant(request.resource.data)) ||
+          (get(/databases/$(database)/documents/conferences/$(conferenceId)).data.organizerUid == request.auth.uid &&
+           areImmutableFieldsUnchanged(['uid', 'role', 'createdAt', 'preferredCommittees', 'bio', 'origin', 'paymentProof']) &&
+           isValidParticipant(request.resource.data))
         );
 
         allow delete: if isAdmin();
