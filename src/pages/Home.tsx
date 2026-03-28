@@ -2,10 +2,17 @@ import { motion, AnimatePresence } from 'motion/react';
 import { ArrowRight, Send, MessageSquare } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import React, { useState, useEffect } from 'react';
-import { db, collection, addDoc, serverTimestamp } from '../firebase';
+import { db, collection, addDoc, serverTimestamp, query, where, onSnapshot, orderBy, limit } from '../firebase';
 import { useFirebase } from '../FirebaseContext';
 
 const heroWords = ['FUTURE.', 'POLITICS.', 'DIPLOMACY.', 'LEADERSHIP.', 'CHANGE.'];
+
+interface Conference {
+  id: string;
+  title: string;
+  date: string;
+  status: string;
+}
 
 export default function Home() {
   const { user } = useFirebase();
@@ -13,6 +20,22 @@ export default function Home() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [wordIndex, setWordIndex] = useState(0);
+  const [nextMilestone, setNextMilestone] = useState<Conference | null>(null);
+
+  useEffect(() => {
+    const q = query(
+      collection(db, 'conferences'), 
+      where('status', '==', 'approved'),
+      orderBy('date', 'asc'),
+      limit(1)
+    );
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      if (!snapshot.empty) {
+        setNextMilestone({ id: snapshot.docs[0].id, ...snapshot.docs[0].data() } as Conference);
+      }
+    });
+    return () => unsubscribe();
+  }, []);
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -183,19 +206,22 @@ export default function Home() {
               </div>
             </div>
 
-            <div className="bg-primary-container p-8 flex flex-col justify-between rounded-xl min-h-[400px]">
+            <Link to="/glossary" className="bg-primary-container p-8 flex flex-col justify-between rounded-xl min-h-[400px] group relative overflow-hidden">
               <motion.div 
                 animate={{ rotate: [0, 10, 0] }}
                 transition={{ repeat: Infinity, duration: 2 }}
-                className="text-on-primary-container"
+                className="text-on-primary-container relative z-10"
               >
-                <ArrowRight size={48} className="rotate-[-45deg]" />
+                <ArrowRight size={48} className="rotate-[-45deg] group-hover:translate-x-2 group-hover:-translate-y-2 transition-transform" />
               </motion.div>
-              <div>
-                <h3 className="text-on-primary-container text-2xl font-bold mb-2 leading-tight">Rigorous Academic Standards</h3>
-                <p className="text-on-primary-container/80 text-sm">Experience the most comprehensive study guides and crisis simulations in the region.</p>
+              <div className="relative z-10">
+                <h3 className="text-on-primary-container text-2xl font-bold mb-2 leading-tight">Model UN Glossary & Rules</h3>
+                <p className="text-on-primary-container/80 text-sm">Master the terminology and procedures of international diplomacy. Everything you need to know before your first session.</p>
               </div>
-            </div>
+              <div className="absolute top-0 right-0 -translate-y-1/4 translate-x-1/4 text-[10rem] font-black opacity-5 select-none pointer-events-none italic uppercase text-on-primary-container">
+                RULES
+              </div>
+            </Link>
           </div>
         </div>
       </section>
@@ -216,7 +242,7 @@ export default function Home() {
                 {[
                   { id: '01', title: 'Delegate Positions', desc: 'Represent nations in committees ranging from UNESCO to the Security Council. Shape international policy through rigorous debate.' },
                   { id: '02', title: 'Press Corps', desc: 'Document the summit. From crisis updates to editorial features, become the voice of the conference.' },
-                  { id: '03', title: 'Chairs & Crisis Staff', desc: 'Direct the flow of history. Manage complex simulations and guide delegates toward consensus.' }
+                  { id: '03', title: 'Chairs & Crisis Staff', desc: 'Direct the flow of history. Manage complex simulations and guide delegates toward consensus with our dedicated Conference App featuring 11 modes of debate, 21 motion types, session statistics, and real-time delegate interaction.' }
                 ].map((item) => (
                   <div key={item.id} className="group cursor-pointer">
                     <div className="flex items-center gap-6 mb-4">
@@ -250,11 +276,22 @@ export default function Home() {
                 />
                 <div className="absolute inset-0 bg-primary-container/20 mix-blend-overlay"></div>
               </div>
-              <div className="absolute -bottom-10 -left-10 bg-surface-container-high p-8 rounded-xl shadow-2xl border border-white/10 hidden xl:block max-w-[280px]">
+              <motion.div 
+                animate={{ 
+                  scale: [1, 1.02, 1],
+                  boxShadow: [
+                    "0 0 0 0 rgba(var(--primary-container), 0)",
+                    "0 0 20px 0 rgba(var(--primary-container), 0.2)",
+                    "0 0 0 0 rgba(var(--primary-container), 0)"
+                  ]
+                }}
+                transition={{ repeat: Infinity, duration: 3, ease: "easeInOut" }}
+                className="absolute -bottom-10 -left-10 bg-surface-container-high p-8 rounded-xl shadow-2xl border border-white/10 hidden xl:block max-w-[280px] z-20"
+              >
                 <p className="text-[10px] uppercase tracking-widest text-primary-container mb-2 font-bold">Upcoming Milestone</p>
-                <p className="text-lg font-bold">Priority Registration Deadline</p>
-                <p className="text-on-surface-variant text-sm mt-2">October 15, 2024</p>
-              </div>
+                <p className="text-lg font-bold">{nextMilestone ? nextMilestone.title : 'Priority Registration Deadline'}</p>
+                <p className="text-on-surface-variant text-sm mt-2">{nextMilestone ? nextMilestone.date : 'October 15, 2024'}</p>
+              </motion.div>
             </div>
           </div>
         </div>

@@ -21,7 +21,11 @@ import {
   Share2,
   Database,
   Globe,
-  Loader2
+  Loader2,
+  MessageSquare,
+  Send,
+  Megaphone,
+  Vote
 } from 'lucide-react';
 import { countries, Country } from '../../constants/countries';
 import { db, collection, addDoc, serverTimestamp, onSnapshot, query, where, doc, updateDoc, getDoc, getDocs } from '../../firebase';
@@ -68,9 +72,51 @@ export default function SessionManager() {
   const [speakersList, setSpeakersList] = useState<Delegate[]>([]);
   const [timer, setTimer] = useState(0);
   const [isTimerRunning, setIsTimerRunning] = useState(false);
-  const [sessionType, setSessionType] = useState<'gsl' | 'mod' | 'unmod'>('gsl');
+  const [sessionType, setSessionType] = useState<string>('gsl');
   const [motions, setMotions] = useState<Motion[]>([]);
+  const [activeMotion, setActiveMotion] = useState<any>(null);
+  const [votingState, setVotingState] = useState<{ active: boolean, question: string, options: string[], results: Record<string, number> } | null>(null);
+  const [documents, setDocuments] = useState<any[]>([]);
+  const [messages, setMessages] = useState<any[]>([]);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
+
+  const debateModes = [
+    { id: 'gsl', name: 'General Speakers List', icon: <Globe size={14} /> },
+    { id: 'mod', name: 'Moderated Caucus', icon: <Mic size={14} /> },
+    { id: 'unmod', name: 'Unmoderated Caucus', icon: <Users size={14} /> },
+    { id: 'consultation', name: 'Consultation of the Whole', icon: <Users size={14} /> },
+    { id: 'formal', name: 'Formal Debate', icon: <CheckCircle2 size={14} /> },
+    { id: 'voting', name: 'Voting Procedure', icon: <Database size={14} /> },
+    { id: 'qa', name: 'Q&A Session', icon: <MessageSquare size={14} /> },
+    { id: 'panel', name: 'Panel of Authors', icon: <Users size={14} /> },
+    { id: 'crisis', name: 'Crisis Mode', icon: <AlertCircle size={14} /> },
+    { id: 'docs', name: 'Introduction of Documents', icon: <FileDown size={14} /> },
+    { id: 'reply', name: 'Right of Reply', icon: <MicOff size={14} /> },
+  ];
+
+  const motionTypes = [
+    "Motion to Open the Session",
+    "Motion to Establish the Agenda",
+    "Motion to Open the Speakers List",
+    "Motion for a Moderated Caucus",
+    "Motion for an Unmoderated Caucus",
+    "Motion for a Consultation of the Whole",
+    "Motion to Extend the Caucus",
+    "Motion to Close the Speakers List",
+    "Motion to Close Debate",
+    "Motion to Adjourn the Session",
+    "Motion to Suspend the Meeting",
+    "Motion to Table the Topic",
+    "Motion to Reconsider",
+    "Motion for a Roll Call Vote",
+    "Motion to Divide the Question",
+    "Motion for a Right of Reply",
+    "Motion to Appeal the Decision of the Chair",
+    "Point of Order",
+    "Point of Personal Privilege",
+    "Point of Parliamentary Inquiry",
+    "Point of Information"
+  ];
 
   // Fetch conferences for import
   useEffect(() => {
@@ -214,7 +260,10 @@ export default function SessionManager() {
             activeSpeaker,
             speakersList,
             delegates,
-            sessionType
+            sessionType,
+            activeMotion,
+            votingState,
+            lastUpdated: serverTimestamp()
           });
         } catch (err) {
           console.error('Error updating session:', err);
@@ -269,6 +318,49 @@ export default function SessionManager() {
       setSpeakersList(speakersList.slice(1));
       setTimer(60); // Default GSL time
       setIsTimerRunning(true);
+    }
+  };
+
+  const startVoting = (question: string, options: string[]) => {
+    const initialResults: Record<string, number> = {};
+    options.forEach(opt => initialResults[opt] = 0);
+    setVotingState({ active: true, question, options, results: initialResults });
+    setSessionType('voting');
+  };
+
+  const closeVoting = () => {
+    setVotingState(prev => prev ? { ...prev, active: false } : null);
+  };
+
+  // Listen for documents and messages
+  useEffect(() => {
+    if (!sessionId) return;
+
+    const docsUnsub = onSnapshot(collection(db, 'sessions', sessionId, 'documents'), (snap) => {
+      setDocuments(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+    });
+
+    const msgUnsub = onSnapshot(collection(db, 'sessions', sessionId, 'messages'), (snap) => {
+      setMessages(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })).sort((a: any, b: any) => a.createdAt?.seconds - b.createdAt?.seconds));
+    });
+
+    return () => {
+      docsUnsub();
+      msgUnsub();
+    };
+  }, [sessionId]);
+
+  const sendAnnouncement = async (text: string) => {
+    if (!sessionId || !text.trim()) return;
+    try {
+      await addDoc(collection(db, 'sessions', sessionId, 'messages'), {
+        text,
+        sender: 'Chair',
+        type: 'announcement',
+        createdAt: serverTimestamp()
+      });
+    } catch (err) {
+      console.error('Error sending announcement:', err);
     }
   };
 
@@ -480,16 +572,16 @@ export default function SessionManager() {
               <div className="h-8 w-px bg-white/10"></div>
               <div>
                 <p className="text-[10px] uppercase tracking-widest text-on-surface/40 font-bold">Session Type</p>
-                <div className="flex gap-2 mt-1">
-                  {(['gsl', 'mod', 'unmod'] as const).map(t => (
+                <div className="flex flex-wrap gap-2 mt-1">
+                  {debateModes.map(t => (
                     <button
-                      key={t}
-                      onClick={() => setSessionType(t)}
-                      className={`px-3 py-1 rounded text-[10px] font-bold uppercase tracking-widest transition-all ${
-                        sessionType === t ? 'bg-primary-container text-on-primary-container' : 'bg-white/5 text-on-surface/40 hover:bg-white/10'
+                      key={t.id}
+                      onClick={() => setSessionType(t.id)}
+                      className={`px-3 py-1 rounded text-[10px] font-bold uppercase tracking-widest transition-all flex items-center gap-2 ${
+                        sessionType === t.id ? 'bg-primary-container text-on-primary-container' : 'bg-white/5 text-on-surface/40 hover:bg-white/10'
                       }`}
                     >
-                      {t}
+                      {t.icon} {t.name}
                     </button>
                   ))}
                 </div>
@@ -530,6 +622,26 @@ export default function SessionManager() {
                   <div className={`text-[12rem] font-black leading-none tracking-tighter mb-12 ${timer < 10 && timer > 0 ? 'text-error animate-pulse' : 'text-on-surface'}`}>
                     {formatTime(timer)}
                   </div>
+                  
+                  {votingState?.active && (
+                    <div className="mb-12 p-8 bg-amber-500/10 rounded-3xl border border-amber-500/20">
+                      <h4 className="text-xl font-black uppercase tracking-tight mb-4 text-amber-500">Live Vote: {votingState.question}</h4>
+                      <div className="grid grid-cols-2 gap-4">
+                        {votingState.options.map(opt => (
+                          <div key={opt} className="bg-surface p-4 rounded-xl border border-white/5">
+                            <p className="text-[10px] uppercase tracking-widest font-bold text-on-surface/40 mb-1">{opt}</p>
+                            <p className="text-2xl font-black">{votingState.results[opt] || 0}</p>
+                          </div>
+                        ))}
+                      </div>
+                      <button 
+                        onClick={closeVoting}
+                        className="mt-6 w-full py-3 bg-amber-500 text-black font-bold uppercase tracking-widest text-xs rounded-xl"
+                      >
+                        Close Voting
+                      </button>
+                    </div>
+                  )}
                   
                   <div className="flex items-center justify-center gap-6">
                     <button 
@@ -656,22 +768,63 @@ export default function SessionManager() {
               </div>
 
               {/* Motions Tracker */}
-              <div className="bg-surface-container-low p-6 rounded-2xl border border-white/5 flex-grow">
+              <div className="bg-surface-container-low p-6 rounded-2xl border border-white/5 flex-grow overflow-hidden flex flex-col">
                 <div className="flex items-center justify-between mb-6">
-                  <h3 className="text-xs uppercase tracking-[0.3em] font-bold text-primary">Motions</h3>
-                  <button className="p-2 bg-primary-container/10 text-primary-container rounded-lg hover:bg-primary-container hover:text-on-primary-container transition-all">
-                    <Plus size={16} />
-                  </button>
-                </div>
-                <div className="space-y-3">
-                  <div className="p-4 bg-surface rounded-xl border border-white/5 border-l-4 border-l-primary-container">
-                    <div className="flex justify-between items-start mb-2">
-                      <span className="text-[10px] font-bold uppercase tracking-widest text-primary-container">Moderated Caucus</span>
-                      <span className="text-[10px] font-bold text-on-surface/40">10:00 / 60s</span>
-                    </div>
-                    <p className="text-sm font-bold mb-1 truncate">Impact of AI on Global Security</p>
-                    <p className="text-[10px] text-on-surface/40 uppercase tracking-widest">Proposed by USA</p>
+                  <h3 className="text-xs uppercase tracking-[0.3em] font-bold text-primary">Motions Hub</h3>
+                  <div className="flex gap-2">
+                    <button 
+                      onClick={() => {
+                        const q = prompt("Enter voting question:");
+                        const opts = prompt("Enter options (comma separated):", "Yes, No, Abstain");
+                        if (q && opts) startVoting(q, opts.split(',').map(s => s.trim()));
+                      }}
+                      className="p-2 bg-amber-500/10 text-amber-500 rounded-lg hover:bg-amber-500 hover:text-black transition-all"
+                      title="Start Vote"
+                    >
+                      <Database size={16} />
+                    </button>
                   </div>
+                </div>
+                
+                <div className="space-y-3 overflow-y-auto pr-2 custom-scrollbar">
+                  {motionTypes.map((m, i) => (
+                    <button 
+                      key={i}
+                      onClick={() => setActiveMotion({ type: m, createdAt: new Date().toISOString() })}
+                      className={`w-full text-left p-3 rounded-xl border transition-all text-[10px] font-bold uppercase tracking-widest ${
+                        activeMotion?.type === m 
+                          ? 'bg-primary-container text-on-primary-container border-primary-container' 
+                          : 'bg-surface border-white/5 text-on-surface/60 hover:border-white/20'
+                      }`}
+                    >
+                      {m}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Announcements */}
+              <div className="bg-surface-container-low p-6 rounded-2xl border border-white/5 h-64 flex flex-col">
+                <h3 className="text-xs uppercase tracking-[0.3em] font-bold text-primary mb-4">Announcements</h3>
+                <div className="flex-grow overflow-y-auto space-y-2 mb-4 pr-2 custom-scrollbar">
+                  {messages.filter(m => m.type === 'announcement').map((m, i) => (
+                    <div key={i} className="p-2 bg-primary-container/5 rounded-lg border border-primary-container/10">
+                      <p className="text-[10px] text-on-surface/80">{m.text}</p>
+                    </div>
+                  ))}
+                </div>
+                <div className="flex gap-2">
+                  <input 
+                    type="text"
+                    placeholder="Broadcast message..."
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        sendAnnouncement((e.target as HTMLInputElement).value);
+                        (e.target as HTMLInputElement).value = '';
+                      }
+                    }}
+                    className="flex-grow bg-surface border border-white/10 rounded-lg px-3 py-2 text-[10px] focus:outline-none focus:border-primary-container"
+                  />
                 </div>
               </div>
             </div>

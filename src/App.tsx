@@ -18,6 +18,7 @@ import SessionManager from './pages/chair/SessionManager';
 import Privacy from './pages/Privacy';
 import Terms from './pages/Terms';
 import Contact from './pages/Contact';
+import Glossary from './pages/Glossary';
 
 import { Toaster } from 'sonner';
 
@@ -91,6 +92,7 @@ export default function App() {
                 <Route path="/privacy" element={<Privacy />} />
                 <Route path="/terms" element={<Terms />} />
                 <Route path="/contact" element={<Contact />} />
+                <Route path="/glossary" element={<Glossary />} />
                 <Route 
                   path="/profile" 
                   element={
